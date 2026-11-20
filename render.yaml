@@ -1,15 +1,17 @@
 services:
   - type: web
     name: tmv
-    runtime: node
+    runtime: docker
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /vlc-status
     envVars:
-      - key: NODE_VERSION
-        value: 20.18.0
+      - key: PORT
+        value: "3000"
+      - key: HOST
+        value: 0.0.0.0
       - key: STREAM_HOST
-        sync: false          # you'll fill in the Render URL after first deploy
+        sync: false                     # fill in the Render URL after first deploy
       - key: TAMILMV_BASES
         value: https://www.1tamilmv.ceo
       - key: TORRENT_PATH
@@ -18,3 +20,7 @@ services:
         value: "3"
       - key: TORRENT_IDLE_TTL_MS
         value: "120000"
+      - key: MAX_STREAM_FILE_BYTES
+        value: "5368709120"
+      - key: MAX_MAGNETS_PER_TOPIC
+        value: "50"
