@@ -16,7 +16,7 @@ import {
   magnetsFromTopic,
   hashFromMagnet,
 } from "./tamilmv.js";
-import { vlcStatus } from "./vlc.js";
+import { vlcStatus, openInVlc } from "./vlc.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? "0.0.0.0";
@@ -162,21 +162,36 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: formatError(e) }));
         return;
       }
-      const hash = hashFromMagnet(normalized) ?? normalized;
 
       try {
-        const torrent = await resolveTorrent(normalized);
+        // [PATCH] Add a 30-second timeout to prevent Render from OOM crashing
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Torrent resolution timed out. The torrent might be dead or have no seeders.")), 30000)
+        );
+        
+        const torrent = await Promise.race([
+          resolveTorrent(normalized),
+          timeoutPromise
+        ]) as any;
+
         const file = pickFile(torrent, fileIdx);
         
         // [PATCH] Use dynamic HTTPS URL for Render
         const streamUrl = `${STREAM_PUBLIC_URL}/stream/${torrent.infoHash}?idx=${torrent.files.indexOf(file)}`;
 
+        // [PATCH] Try to open VLC. If it fails (or isn't installed), return the URL for the web player.
+        const vlcResult = openInVlc(streamUrl);
+
         res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
         res.end(JSON.stringify({
-          infoHash: torrent.infoHash, fileName: file.name, fileSize: file.length,
-          streamUrl, playerUrl: streamUrl, vlc: { ok: false }
+          infoHash: torrent.infoHash, 
+          fileName: file.name, 
+          fileSize: file.length,
+          streamUrl, 
+          vlc: vlcResult 
         }));
       } catch (err) {
+        console.error("[play] error:", err);
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: formatError(err) }));
       }
@@ -258,6 +273,8 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`▶ torrent-stream listening on http://${HOST}:${PORT}`);
   console.log(`  UI:        ${STREAM_PUBLIC_URL}/`);
+  const st = vlcStatus();
+  console.log(`  VLC:       ${st.available ? st.vlcPath : "NOT FOUND — browser playback will be used"}`);
 });
 
 // ---------------------------------------------------------------- utils
@@ -465,31 +482,41 @@ function renderResult(r) {
 }
 
 async function playStream(magnet) {
-  log("requesting stream... this can take up to 30 seconds to find peers.", "info");
+  log("requesting stream... this can take up to 30 seconds.", "info");
   try {
     const res = await fetch("/play", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ magnet }),
     });
+    
+    // [PATCH] Check if the response is JSON before parsing
+    const contentType = res.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("Server crashed or returned an HTML error page. The torrent may be too large for Render's memory limit.");
+    }
+    
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
     
-    log("stream ready: " + data.fileName, "ok");
-    
-    // Create a video player inside the log area
-    const video = document.createElement("video");
-    video.controls = true;
-    video.autoplay = true;
-    video.style.width = "100%";
-    video.style.maxHeight = "500px";
-    video.style.marginTop = "10px";
-    video.style.borderRadius = "8px";
-    video.style.background = "#000";
-    video.src = data.streamUrl;
-    
-    $("log").appendChild(video);
-    $("log").scrollTop = $("log").scrollHeight;
+    if (data.vlc && data.vlc.ok) {
+      log("Playing in local VLC!", "ok");
+    } else {
+      log("Stream ready: " + data.fileName + " (playing in browser)", "ok");
+      
+      const video = document.createElement("video");
+      video.controls = true;
+      video.autoplay = true;
+      video.style.width = "100%";
+      video.style.maxHeight = "500px";
+      video.style.marginTop = "10px";
+      video.style.borderRadius = "8px";
+      video.style.background = "#000";
+      video.src = data.streamUrl;
+      
+      $("log").appendChild(video);
+      $("log").scrollTop = $("log").scrollHeight;
+    }
     
   } catch (err) {
     log("stream failed: " + err.message, "err");
