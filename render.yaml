@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: tmv
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: STREAM_HOST
+        sync: false          # you'll fill in the Render URL after first deploy
+      - key: TAMILMV_BASES
+        value: https://www.1tamilmv.ceo
+      - key: TORRENT_PATH
+        value: /tmp/torrents
+      - key: MAX_ACTIVE_TORRENTS
+        value: "3"
+      - key: TORRENT_IDLE_TTL_MS
+        value: "120000"
