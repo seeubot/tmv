@@ -2,8 +2,9 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
+# [FIX] `npm install` instead of `npm ci` — no lockfile in repo yet
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -18,9 +19,9 @@ ENV TORRENT_PATH=/tmp/torrents
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
-# prod deps only
+# [FIX] same here — install without --omit=dev crash path
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm install --omit=dev && npm cache clean --force
 
 COPY --from=build /app/dist ./dist
 
@@ -32,4 +33,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/vlc-status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/server.js"]s
