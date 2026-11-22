@@ -160,6 +160,8 @@ function renderIndex(): string {
   .btn-play:hover { background: #059669 !important; }
   .btn-vlc { background: #ff7a00 !important; }
   .btn-vlc:hover { background: #ea580c !important; }
+  .btn-copy { background: #6366f1 !important; }
+  .btn-copy:hover { background: #4f46e5 !important; }
   
   #log { font-family: monospace; color: #888; margin-top: 1rem; font-size: 13px; white-space: pre-wrap; }
 </style>
@@ -181,6 +183,7 @@ function renderIndex(): string {
         <div class="btn-group">
           <button class="btn-play" onclick="playBrowser()">▶ Play in Web Player</button>
           <button class="btn-vlc" onclick="playVLC()">▶ Play in VLC</button>
+          <button class="btn-copy" onclick="copyUrl()">📋 Copy Direct URL</button>
         </div>
       </div>
     </div>
@@ -262,52 +265,33 @@ function playVLC() {
   const title = document.getElementById("det-title").innerText;
   const url = currentDirectUrl;
 
-  // 1. Mobile (Android) - Uses Android Intents to launch VLC
+  // 1. Mobile (Android) - Try launching VLC via Intent
   if (/Android/i.test(navigator.userAgent)) {
-    const cleanUrl = url.replace(/^https?:\\/\\//, '');
-    const intentUrl = \`intent://\${cleanUrl}#Intent;scheme=https;package=org.videolan.vlc;S.title=\${encodeURIComponent(title)};end\`;
-    
     log("Launching VLC on Android...");
-    window.location.href = intentUrl;
+    // Use the direct URL encoded as an intent
+    const intentUrl = \`intent://\${url.replace(/^https?:\\/\\//, '')}#Intent;scheme=https;package=org.videolan.vlc;S.title=\${encodeURIComponent(title)};end\`;
     
-    // Fallback to MX Player
-    setTimeout(() => {
-      window.location.href = \`intent://\${cleanUrl}#Intent;scheme=https;package=com.mxtech.videoplayer.ad;S.title=\${encodeURIComponent(title)};end\`;
-    }, 2000);
+    // Try to open the intent
+    window.location.href = intentUrl;
     return;
   }
 
-  // 2. Desktop (Windows/Mac) - Uses custom vlc:// protocol
-  log("Attempting to launch VLC directly...");
-  const vlcProtocolUrl = \`vlc://\${url}\`;
-  
-  const iframe = document.createElement("iframe");
-  iframe.style.display = "none";
-  iframe.src = vlcProtocolUrl;
-  document.body.appendChild(iframe);
+  // 2. Desktop (Windows/Mac) - Use the vlc:// protocol
+  log("Attempting to launch VLC on Desktop...");
+  // The vlc:// scheme asks the OS to open VLC with the following URL
+  window.location.href = \`vlc://\${url}\`;
+}
 
-  setTimeout(() => { document.body.removeChild(iframe); }, 1000);
-
-  log("If VLC didn't open, it may not be installed, or your browser blocked the launch. Use the fallback button.");
-  
-  // Fallback download button
-  const fallbackBtn = document.createElement("button");
-  fallbackBtn.innerText = "Download .m3u Playlist (Fallback)";
-  fallbackBtn.style.marginTop = "10px";
-  fallbackBtn.onclick = () => {
-    const m3uContent = "#EXTM3U\\n#EXTINF:-1," + title + "\\n" + url;
-    const blob = new Blob([m3uContent], { type: "audio/x-mpegurl" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "Play_in_VLC.m3u";
-    a.click();
-  };
-  
-  const panel = document.getElementById("details-panel");
-  if (!document.getElementById("fallback-vlc-btn")) {
-    fallbackBtn.id = "fallback-vlc-btn";
-    panel.appendChild(fallbackBtn);
+function copyUrl() {
+  if (!currentDirectUrl) {
+    log("No URL loaded yet.");
+    return;
   }
+  navigator.clipboard.writeText(currentDirectUrl).then(() => {
+    log("Direct URL copied to clipboard!");
+  }).catch(err => {
+    log("Failed to copy: " + err);
+  });
 }
 </script>
 </body>
