@@ -12,6 +12,7 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "cheerio": "^1.0.0",
     "dotenv": "^16.4.5",
     "parse-torrent": "^11.0.24",
     "uint8-util": "2.2.5",
